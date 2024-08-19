@@ -892,7 +892,7 @@ func TestGitGetter_BadGitConfig(t *testing.T) {
 		err = g.update(ctx, dst, testGitToken, url, "main", 1)
 	} else {
 		// Clone a repository with a git config file
-		err = g.clone(ctx, dst, testGitToken, url, "main", 1)
+		err = g.clone(ctx, dst, testGitToken, url, "main", 1, "")
 		if err != nil {
 			t.Fatalf(err.Error())
 		}
@@ -950,7 +950,7 @@ func TestGitGetter_BadGitDirName(t *testing.T) {
 		}
 	} else {
 		// Clone a repository with a git directory
-		err = g.clone(ctx, dst, testGitToken, url, "main", 1)
+		err = g.clone(ctx, dst, testGitToken, url, "main", 1, "")
 		if err != nil {
 			t.Fatalf(err.Error())
 		}
@@ -981,6 +981,77 @@ func TestGitGetter_BadGitDirName(t *testing.T) {
 	// Check if the .git directory exists
 	if _, err := os.Stat(filepath.Join(dst, ".git")); !os.IsNotExist(err) {
 		t.Fatalf(".git directory still exists")
+	}
+}
+
+func TestGitGetter_sparseCheckout(t *testing.T) {
+	if !testHasGit {
+		t.Skip("git not found, skipping")
+	}
+
+	g := new(GitGetter)
+	dst := tempDir(t)
+
+	repo := testGitRepo(t, "sparse-checkout")
+	repo.commitFile("subdir1/file1.txt", "hello")
+	repo.commitFile("subdir2/file2.txt", "world")
+
+	q := repo.url.Query()
+	q.Add("subdir", "subdir1")
+	repo.url.RawQuery = q.Encode()
+
+	if err := g.Get(dst, repo.url); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// Verify the file in subdir1 exists
+	mainPath := filepath.Join(dst, "subdir1/file1.txt")
+	if _, err := os.Stat(mainPath); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// Verify the file in subdir2 does not exist
+	mainPath = filepath.Join(dst, "subdir2/file2.txt")
+	if _, err := os.Stat(mainPath); err == nil {
+		t.Fatalf("expected subdir2 file to not exist")
+	}
+}
+
+func TestGitGetter_sparseCheckoutWithCommitID(t *testing.T) {
+	if !testHasGit {
+		t.Skip("git not found, skipping")
+	}
+
+	g := new(GitGetter)
+	dst := tempDir(t)
+
+	repo := testGitRepo(t, "sparse-checkout-commit-id")
+	repo.commitFile("subdir1/file1.txt", "hello")
+	repo.commitFile("subdir2/file2.txt", "world")
+	commitID, err := repo.latestCommit()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	q := repo.url.Query()
+	q.Add("ref", commitID)
+	q.Add("subdir", "subdir1")
+	repo.url.RawQuery = q.Encode()
+
+	if err := g.Get(dst, repo.url); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// Verify the file in subdir1 exists
+	mainPath := filepath.Join(dst, "subdir1/file1.txt")
+	if _, err := os.Stat(mainPath); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// Verify the file in subdir2 does not exist
+	mainPath = filepath.Join(dst, "subdir2/file2.txt")
+	if _, err := os.Stat(mainPath); err == nil {
+		t.Fatalf("expected subdir2 file to not exist")
 	}
 }
 
@@ -1035,6 +1106,13 @@ func (r *gitRepo) git(args ...string) {
 // commitFile writes and commits a text file to the repo.
 func (r *gitRepo) commitFile(file, content string) {
 	path := filepath.Join(r.dir, file)
+
+	// Ensure the directory structure exists
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		r.t.Fatal(err)
+	}
+
 	if err := ioutil.WriteFile(path, []byte(content), 0600); err != nil {
 		r.t.Fatal(err)
 	}
