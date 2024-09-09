@@ -64,8 +64,9 @@ func (g *GitGetter) Get(dst string, u *url.URL) error {
 	}
 
 	// Extract some query parameters we use
-	var ref, sshKey string
+	var ref, sshKey, subdir string
 	depth := 0 // 0 means "don't use shallow clone"
+
 	q := u.Query()
 	if len(q) > 0 {
 		ref = q.Get("ref")
@@ -73,6 +74,12 @@ func (g *GitGetter) Get(dst string, u *url.URL) error {
 
 		sshKey = q.Get("sshkey")
 		q.Del("sshkey")
+
+		subdir = q.Get("subdir")
+		q.Del("subdir")
+		if subdir != "" {
+			depth = 1
+		}
 
 		if n, err := strconv.Atoi(q.Get("depth")); err == nil {
 			depth = n
@@ -127,7 +134,7 @@ func (g *GitGetter) Get(dst string, u *url.URL) error {
 	if err == nil {
 		err = g.update(ctx, dst, sshKeyFile, u, ref, depth)
 	} else {
-		err = g.clone(ctx, dst, sshKeyFile, u, ref, depth)
+		err = g.clone(ctx, dst, sshKeyFile, u, ref, depth, subdir)
 	}
 	if err != nil {
 		return err
@@ -189,8 +196,10 @@ func (g *GitGetter) checkout(ctx context.Context, dst string, ref string) error 
 // positives on short branch names that happen to also be "hex words".
 var gitCommitIDRegex = regexp.MustCompile("^[0-9a-fA-F]{7,40}$")
 
-func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.URL, ref string, depth int) error {
+func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.URL, ref string, depth int, subdir string) error {
 	args := []string{"clone"}
+
+	isCommitID := gitCommitIDRegex.MatchString(ref)
 
 	originalRef := ref // we handle an unspecified ref differently than explicitly selecting the default branch below
 	if ref == "" {
@@ -198,8 +207,16 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 	}
 	if depth > 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))
-		args = append(args, "--branch", ref)
+		if subdir == "" || !isCommitID {
+			args = append(args, "--branch", ref)
+		}
 	}
+	if subdir != "" {
+		args = append(args, "--filter=blob:none")
+		args = append(args, "--sparse")
+		args = append(args, "--no-checkout")
+	}
+
 	args = append(args, "--", u.String(), dst)
 
 	cmd := exec.CommandContext(ctx, "git", args...)
@@ -212,11 +229,31 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 			// We can't accurately recognize the resulting error here without
 			// hard-coding assumptions about git's human-readable output, but
 			// we can at least try a heuristic.
-			if gitCommitIDRegex.MatchString(originalRef) {
+			if isCommitID {
 				return fmt.Errorf("%w (note that setting 'depth' requires 'ref' to be a branch or tag name)", err)
 			}
 		}
 		return err
+	}
+
+	if subdir != "" {
+		cmd = exec.CommandContext(ctx, "git", "sparse-checkout", "set", subdir)
+		cmd.Dir = dst
+		err = getRunCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		if isCommitID {
+			cmd = exec.CommandContext(ctx, "git", "fetch", "origin", ref, "--depth", "1")
+			cmd.Dir = dst
+			err = getRunCommand(cmd)
+			if err != nil {
+				return err
+			}
+		}
+
+		return g.checkout(ctx, dst, ref)
 	}
 
 	if depth < 1 && originalRef != "" {
