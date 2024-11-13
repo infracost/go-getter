@@ -889,7 +889,7 @@ func TestGitGetter_BadGitConfig(t *testing.T) {
 	if err == nil {
 		// Update the repository containing the bad git config.
 		// This should remove the bad git config file and initialize a new one.
-		err = g.update(ctx, dst, testGitToken, url, "main", 1)
+		err = g.update(ctx, dst, testGitToken, url, "main", 1, "")
 	} else {
 		// Clone a repository with a git config file
 		err = g.clone(ctx, dst, testGitToken, url, "main", 1, "")
@@ -906,7 +906,7 @@ func TestGitGetter_BadGitConfig(t *testing.T) {
 
 		// Update the repository containing the bad git config.
 		// This should remove the bad git config file and initialize a new one.
-		err = g.update(ctx, dst, testGitToken, url, "main", 1)
+		err = g.update(ctx, dst, testGitToken, url, "main", 1, "")
 	}
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -1052,6 +1052,57 @@ func TestGitGetter_sparseCheckoutWithCommitID(t *testing.T) {
 	mainPath = filepath.Join(dst, "subdir2/file2.txt")
 	if _, err := os.Stat(mainPath); err == nil {
 		t.Fatalf("expected subdir2 file to not exist")
+	}
+}
+
+func TestGitGetter_updateWithSparseCheckout(t *testing.T) {
+	if !testHasGit {
+		t.Skip("git not found, skipping")
+	}
+
+	g := new(GitGetter)
+	dst := tempDir(t)
+
+	// Create initial repo with multiple subdirectories
+	repo := testGitRepo(t, "sparse-update")
+	repo.commitFile("subdir1/file1.txt", "hello")
+	repo.commitFile("subdir2/file2.txt", "world")
+
+	// First clone with sparse checkout of subdir1
+	q := repo.url.Query()
+	q.Add("subdir", "subdir1")
+	repo.url.RawQuery = q.Encode()
+
+	if err := g.Get(dst, repo.url); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// Verify only subdir1 exists
+	mainPath := filepath.Join(dst, "subdir1/file1.txt")
+	if _, err := os.Stat(mainPath); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	mainPath = filepath.Join(dst, "subdir2/file2.txt")
+	if _, err := os.Stat(mainPath); err == nil {
+		t.Fatalf("expected subdir2 file to not exist")
+	}
+
+	// Update with a new subdir
+	q.Set("subdir", "subdir2")
+	repo.url.RawQuery = q.Encode()
+
+	if err := g.Get(dst, repo.url); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// Verify both subdirs now exist
+	mainPath = filepath.Join(dst, "subdir1/file1.txt")
+	if _, err := os.Stat(mainPath); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	mainPath = filepath.Join(dst, "subdir2/file2.txt")
+	if _, err := os.Stat(mainPath); err != nil {
+		t.Fatalf("err: %s", err)
 	}
 }
 

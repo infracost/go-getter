@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -132,7 +133,7 @@ func (g *GitGetter) Get(dst string, u *url.URL) error {
 		return err
 	}
 	if err == nil {
-		err = g.update(ctx, dst, sshKeyFile, u, ref, depth)
+		err = g.update(ctx, dst, sshKeyFile, u, ref, depth, subdir)
 	} else {
 		err = g.clone(ctx, dst, sshKeyFile, u, ref, depth, subdir)
 	}
@@ -265,7 +266,29 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 	return nil
 }
 
-func (g *GitGetter) update(ctx context.Context, dst, sshKeyFile string, u *url.URL, ref string, depth int) error {
+func (g *GitGetter) update(ctx context.Context, dst, sshKeyFile string, u *url.URL, ref string, depth int, subdir string) error {
+	if subdir != "" {
+		enabled, err := isSparseCheckoutEnabled(ctx, dst)
+		if err != nil {
+			return err
+		}
+
+		if enabled {
+			dirs, err := getSparseCheckoutDirs(ctx, dst)
+			if err != nil {
+				return err
+			}
+
+
+			err = setSparseCheckoutDirs(ctx, dst, append(dirs, subdir))
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}
+	}
+
 	// Remove all variations of .git directories
 	err := removeCaseInsensitiveGitDirectory(dst)
 	if err != nil {
@@ -340,6 +363,61 @@ func (g *GitGetter) fetchSubmodules(ctx context.Context, dst, sshKeyFile string,
 	cmd.Dir = dst
 	setupGitEnv(cmd, sshKeyFile)
 	return getRunCommand(cmd)
+}
+
+// isSparseCheckoutEnabled checks if sparse-checkout is enabled in the repository
+func isSparseCheckoutEnabled(ctx context.Context, dst string) (bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "config", "--get", "core.sparseCheckout")
+	cmd.Dir = dst
+	output, err := cmd.Output()
+	if err != nil {
+		// if exit status is 1, then the config is not set
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("error checking if sparse-checkout is enabled: %w", err)
+	}
+	return string(output) == "true\n", nil
+}
+
+// getSparseCheckoutDirs gets the list of directories currently in sparse-checkout
+func getSparseCheckoutDirs(ctx context.Context, dst string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "git", "sparse-checkout", "list")
+	cmd.Dir = dst
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		stderrStr := strings.TrimSpace(stderr.String())
+		if strings.Contains(stderrStr, "this worktree is not sparse") {
+			return nil, errors.New("sparse-checkout not enabled")
+		}
+
+		return nil, fmt.Errorf("error getting sparse-checkout list: %w", err)
+	}
+
+	output := strings.TrimSpace(stdout.String())
+	if output == "" {
+		return nil, nil
+	}
+
+	return strings.Split(output, "\n"), nil
+}
+
+// setSparseCheckoutDirs sets the sparse-checkout list to include the given directories
+func setSparseCheckoutDirs(ctx context.Context, dst string, dirs []string) error {
+	cmd := exec.CommandContext(ctx, "git", "sparse-checkout", "set")
+	cmd.Dir = dst
+	cmd.Args = append(cmd.Args, dirs...)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error setting sparse-checkout list: %w", err)
+	}
+
+	return nil
 }
 
 // findDefaultBranch checks the repo's origin remote for its default branch
