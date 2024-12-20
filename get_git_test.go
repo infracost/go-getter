@@ -1055,6 +1055,46 @@ func TestGitGetter_sparseCheckoutWithCommitID(t *testing.T) {
 	}
 }
 
+func TestGitGetter_sparseCheckoutWithShortCommitID(t *testing.T) {
+	if !testHasGit {
+		t.Skip("git not found, skipping")
+	}
+
+	g := new(GitGetter)
+	dst := tempDir(t)
+
+	repo := testGitRepo(t, "sparse-checkout-short-commit")
+	repo.commitFile("subdir1/file1.txt", "hello")
+	repo.commitFile("subdir2/file2.txt", "world")
+	commitID, err := repo.latestCommit()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	shortCommitID := commitID[:7]
+
+	q := repo.url.Query()
+	q.Add("ref", shortCommitID)
+	q.Add("subdir", "subdir1")
+	repo.url.RawQuery = q.Encode()
+
+	if err := g.Get(dst, repo.url); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// Verify the file in subdir1 exists
+	mainPath := filepath.Join(dst, "subdir1/file1.txt")
+	if _, err := os.Stat(mainPath); err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// Verify the file in subdir2 does not exist
+	mainPath = filepath.Join(dst, "subdir2/file2.txt")
+	if _, err := os.Stat(mainPath); err == nil {
+		t.Fatalf("expected subdir2 file to not exist")
+	}
+}
+
 // gitRepo is a helper struct which controls a single temp git repo.
 type gitRepo struct {
 	t   *testing.T
