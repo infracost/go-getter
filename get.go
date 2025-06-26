@@ -20,7 +20,6 @@ import (
 	"net/url"
 	"os/exec"
 	"regexp"
-	"syscall"
 
 	cleanhttp "github.com/hashicorp/go-cleanhttp"
 )
@@ -130,13 +129,11 @@ func getRunCommand(cmd *exec.Cmd) error {
 	}
 	if exiterr, ok := err.(*exec.ExitError); ok {
 		// The program has exited with an exit code != 0
-		if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-			return fmt.Errorf(
-				"%s exited with %d: %s",
-				cmd.Path,
-				status.ExitStatus(),
-				buf.String())
-		}
+		return fmt.Errorf(
+			"%s exited with %s: %s",
+			cmd.Path,
+			exiterr.ProcessState.String(),
+			buf.String())
 	}
 
 	return fmt.Errorf("error running %s: %s", cmd.Path, buf.String())
