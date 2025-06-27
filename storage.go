@@ -3,6 +3,8 @@
 
 package getter
 
+import "context"
+
 // Storage is an interface that knows how to lookup downloaded directories
 // as well as download and update directories from their sources into the
 // proper location.
@@ -12,5 +14,5 @@ type Storage interface {
 	Dir(string) (string, bool, error)
 
 	// Get will download and optionally update the given directory.
-	Get(string, string, bool) error
+	Get(context.Context, string, string, bool) error
 }

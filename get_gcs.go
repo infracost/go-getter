@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/option"
@@ -25,10 +24,6 @@ import (
 type GCSGetter struct {
 	getter
 
-	// Timeout sets a deadline which all GCS operations should
-	// complete within. Zero value means no timeout.
-	Timeout time.Duration
-
 	// FileSizeLimit limits the size of an single
 	// decompressed file.
 	//
@@ -36,14 +31,7 @@ type GCSGetter struct {
 	FileSizeLimit int64
 }
 
-func (g *GCSGetter) ClientMode(u *url.URL) (ClientMode, error) {
-	ctx := g.Context()
-
-	if g.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, g.Timeout)
-		defer cancel()
-	}
+func (g *GCSGetter) ClientMode(ctx context.Context, u *url.URL) (ClientMode, error) {
 
 	// Parse URL
 	bucket, object, _, err := g.parseURL(u)
@@ -79,14 +67,7 @@ func (g *GCSGetter) ClientMode(u *url.URL) (ClientMode, error) {
 	return ClientModeFile, nil
 }
 
-func (g *GCSGetter) Get(dst string, u *url.URL) error {
-	ctx := g.Context()
-
-	if g.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, g.Timeout)
-		defer cancel()
-	}
+func (g *GCSGetter) Get(ctx context.Context, dst string, u *url.URL) error {
 
 	// Parse URL
 	bucket, object, _, err := g.parseURL(u)
@@ -144,15 +125,7 @@ func (g *GCSGetter) Get(dst string, u *url.URL) error {
 	return nil
 }
 
-func (g *GCSGetter) GetFile(dst string, u *url.URL) error {
-	ctx := g.Context()
-
-	if g.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, g.Timeout)
-		defer cancel()
-	}
-
+func (g *GCSGetter) GetFile(ctx context.Context, dst string, u *url.URL) error {
 	// Parse URL
 	bucket, object, fragment, err := g.parseURL(u)
 	if err != nil {

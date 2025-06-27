@@ -91,7 +91,7 @@ type HttpGetter struct {
 	XTerraformGetDisabled bool
 }
 
-func (g *HttpGetter) ClientMode(u *url.URL) (ClientMode, error) {
+func (g *HttpGetter) ClientMode(_ context.Context, u *url.URL) (ClientMode, error) {
 	if strings.HasSuffix(u.Path, "/") {
 		return ClientModeDir, nil
 	}
@@ -168,9 +168,7 @@ func newLimitedWrappedReaderCloser(r io.ReadCloser, limit int64) io.ReadCloser {
 	}
 }
 
-func (g *HttpGetter) Get(dst string, u *url.URL) error {
-	ctx := g.Context()
-
+func (g *HttpGetter) Get(ctx context.Context, dst string, u *url.URL) error {
 	// Optionally disable any X-Terraform-Get redirects. This is reccomended for usage of
 	// this client outside of Terraform's. This feature is likely not required if the
 	// source server can provider normal HTTP redirects.
@@ -357,19 +355,13 @@ func (g *HttpGetter) Get(dst string, u *url.URL) error {
 		}
 	}
 
-	// Ensure we pass along the context we constructed in this function.
-	//
-	// This is especially important to enforce a limit on X-Terraform-Get redirects
-	// which could be setup, if configured, at the top of this function.
-	opts = append(opts, WithContext(ctx))
-
 	if subDir != "" {
 		// We have a subdir, time to jump some hoops
 		return g.getSubdir(ctx, dst, source, subDir, opts...)
 	}
 
 	// Note: this allows the protocol to be switched to another configured getters.
-	return Get(dst, source, opts...)
+	return Get(ctx, dst, source, opts...)
 }
 
 // GetFile fetches the file from src and stores it at dst.
@@ -378,8 +370,7 @@ func (g *HttpGetter) Get(dst string, u *url.URL) error {
 // older version of the destination file does not exist, else it will be either
 // falsely identified as being replaced, or corrupted with extra bytes
 // appended.
-func (g *HttpGetter) GetFile(dst string, src *url.URL) error {
-	ctx := g.Context()
+func (g *HttpGetter) GetFile(ctx context.Context, dst string, src *url.URL) error {
 
 	// Optionally enforce a maxiumum HTTP response body size.
 	if g.MaxBytes > 0 {
@@ -521,7 +512,7 @@ func (g *HttpGetter) getSubdir(ctx context.Context, dst, source, subDir string, 
 	defer tdcloser.Close()
 
 	// Download that into the given directory
-	if err := Get(td, source, opts...); err != nil {
+	if err := Get(ctx, td, source, opts...); err != nil {
 		return err
 	}
 

@@ -26,8 +26,6 @@ var ErrSymlinkCopy = errors.New("copying of symlinks has been disabled")
 // Using a client directly allows more fine-grained control over how downloading
 // is done, as well as customizing the protocols supported.
 type Client struct {
-	// Ctx for cancellation
-	Ctx context.Context
 
 	// Src is the source URL to get.
 	//
@@ -104,7 +102,7 @@ func (c *Client) mode(mode os.FileMode) os.FileMode {
 }
 
 // Get downloads the configured source to the destination.
-func (c *Client) Get() error {
+func (c *Client) Get(ctx context.Context) error {
 	if err := c.Configure(c.Options...); err != nil {
 		return err
 	}
@@ -221,7 +219,7 @@ func (c *Client) Get() error {
 	}
 
 	// Determine checksum if we have one
-	checksum, err := c.extractChecksum(u)
+	checksum, err := c.extractChecksum(ctx, u)
 	if err != nil {
 		return fmt.Errorf("invalid checksum: %s", err)
 	}
@@ -232,7 +230,7 @@ func (c *Client) Get() error {
 
 	if mode == ClientModeAny {
 		// Ask the getter which client mode to use
-		mode, err = g.ClientMode(u)
+		mode, err = g.ClientMode(ctx, u)
 		if err != nil {
 			return err
 		}
@@ -270,7 +268,7 @@ func (c *Client) Get() error {
 			}
 		}
 		if getFile {
-			err := g.GetFile(dst, u)
+			err := g.GetFile(ctx, dst, u)
 			if err != nil {
 				return err
 			}
@@ -321,7 +319,7 @@ func (c *Client) Get() error {
 
 		// We're downloading a directory, which might require a bit more work
 		// if we're specifying a subdir.
-		err := g.Get(dst, u)
+		err := g.Get(ctx, dst, u)
 		if err != nil {
 			err = fmt.Errorf("error downloading '%s': %s", RedactURL(u), err)
 			return err
@@ -343,7 +341,7 @@ func (c *Client) Get() error {
 			return err
 		}
 
-		return copyDir(c.Ctx, realDst, subDir, false, c.DisableSymlinks, c.umask())
+		return copyDir(ctx, realDst, subDir, false, c.DisableSymlinks, c.umask())
 	}
 
 	return nil

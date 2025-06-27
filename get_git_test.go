@@ -45,7 +45,7 @@ func TestGitGetter(t *testing.T) {
 	repo.commitFile("foo.txt", "hello")
 
 	// With a dir that doesn't exist
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -72,7 +72,7 @@ func TestGitGetter_branch(t *testing.T) {
 	q.Add("ref", "test-branch")
 	repo.url.RawQuery = q.Encode()
 
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -83,7 +83,7 @@ func TestGitGetter_branch(t *testing.T) {
 	}
 
 	// Get again should work
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -124,7 +124,7 @@ func TestGitGetter_commitID(t *testing.T) {
 	repo.url.RawQuery = q.Encode()
 
 	t.Logf("Getting %s", repo.url)
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -135,7 +135,7 @@ func TestGitGetter_commitID(t *testing.T) {
 	}
 
 	// Get again should work
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -162,7 +162,7 @@ func TestGitGetter_remoteWithoutMaster(t *testing.T) {
 	q := repo.url.Query()
 	repo.url.RawQuery = q.Encode()
 
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -174,7 +174,7 @@ func TestGitGetter_remoteWithoutMaster(t *testing.T) {
 
 	dst2 := tempDir(t)
 	// Get again should work
-	if err := g.Get(dst2, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst2, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -203,7 +203,7 @@ func TestGitGetter_shallowClone(t *testing.T) {
 	q.Add("depth", "1")
 	repo.url.RawQuery = q.Encode()
 
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -241,7 +241,7 @@ func TestGitGetter_shallowCloneWithTag(t *testing.T) {
 	q.Add("depth", "1")
 	repo.url.RawQuery = q.Encode()
 
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -298,7 +298,7 @@ func TestGitGetter_shallowCloneWithCommitID(t *testing.T) {
 	repo.url.RawQuery = q.Encode()
 
 	t.Logf("Getting %s", repo.url)
-	err = g.Get(dst, repo.url)
+	err = g.Get(context.Background(), dst, repo.url)
 	if err == nil {
 		t.Fatalf("success; want error")
 	}
@@ -326,7 +326,7 @@ func TestGitGetter_branchUpdate(t *testing.T) {
 	q := repo.url.Query()
 	q.Add("ref", "test-branch")
 	repo.url.RawQuery = q.Encode()
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -340,7 +340,7 @@ func TestGitGetter_branchUpdate(t *testing.T) {
 	repo.commitFile("branch-update.txt", "branch-update")
 
 	// Get again should work
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -367,7 +367,7 @@ func TestGitGetter_tag(t *testing.T) {
 	q.Add("ref", "v1.0")
 	repo.url.RawQuery = q.Encode()
 
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -378,7 +378,7 @@ func TestGitGetter_tag(t *testing.T) {
 	}
 
 	// Get again should work
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -403,7 +403,7 @@ func TestGitGetter_GetFile(t *testing.T) {
 
 	// Download the file
 	repo.url.Path = filepath.Join(repo.url.Path, "file.txt")
-	if err := g.GetFile(dst, repo.url); err != nil {
+	if err := g.GetFile(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -473,7 +473,7 @@ func TestGitGetter_sshKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := g.Get(dst, u); err != nil {
+	if err := g.Get(context.Background(), dst, u); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -514,7 +514,7 @@ func TestGitGetter_sshSCPStyle(t *testing.T) {
 		},
 	}
 
-	if err := client.Get(); err != nil {
+	if err := client.Get(context.Background()); err != nil {
 		t.Fatalf("client.Get failed: %s", err)
 	}
 
@@ -555,7 +555,7 @@ func TestGitGetter_sshExplicitPort(t *testing.T) {
 		},
 	}
 
-	if err := client.Get(); err != nil {
+	if err := client.Get(context.Background()); err != nil {
 		t.Fatalf("client.Get failed: %s", err)
 	}
 
@@ -596,7 +596,7 @@ func TestGitGetter_sshSCPStyleInvalidScheme(t *testing.T) {
 		},
 	}
 
-	err := client.Get()
+	err := client.Get(context.Background())
 	if err == nil {
 		t.Fatalf("get succeeded; want error")
 	}
@@ -646,7 +646,7 @@ func TestGitGetter_submodule(t *testing.T) {
 	p.git("commit", "-m", "Add child submodule")
 
 	// Clone the root repository
-	if err := g.Get(dst, p.url); err != nil {
+	if err := g.Get(context.Background(), dst, p.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -772,7 +772,7 @@ func TestGitGetter_subdirectory_symlink(t *testing.T) {
 		},
 	}
 
-	err = client.Get()
+	err = client.Get(context.Background())
 
 	if runtime.GOOS == "windows" {
 		// Windows doesn't handle symlinks as one might expect with git.
@@ -831,7 +831,7 @@ func TestGitGetter_subdirectory(t *testing.T) {
 		},
 	}
 
-	err = client.Get()
+	err = client.Get(context.Background())
 	if err == nil {
 		t.Fatalf("expected client get to fail")
 	}
@@ -858,7 +858,7 @@ func TestGitGetter_BadRemoteUrl(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = g.Get(dst, u)
+	err = g.Get(context.Background(), dst, u)
 	if err == nil {
 		t.Fatalf("get succeeded; want error")
 	}
@@ -1035,7 +1035,7 @@ func TestGitGetter_sparseCheckout(t *testing.T) {
 	q.Add("subdir", "subdir1")
 	repo.url.RawQuery = q.Encode()
 
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -1073,7 +1073,7 @@ func TestGitGetter_sparseCheckoutWithCommitID(t *testing.T) {
 	q.Add("subdir", "subdir1")
 	repo.url.RawQuery = q.Encode()
 
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -1113,7 +1113,7 @@ func TestGitGetter_sparseCheckoutWithShortCommitID(t *testing.T) {
 	q.Add("subdir", "subdir1")
 	repo.url.RawQuery = q.Encode()
 
-	if err := g.Get(dst, repo.url); err != nil {
+	if err := g.Get(context.Background(), dst, repo.url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 

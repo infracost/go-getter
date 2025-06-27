@@ -4,6 +4,7 @@
 package getter
 
 import (
+	"context"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -24,6 +25,7 @@ func TestGCSGetter(t *testing.T) {
 
 	// With a dir that doesn't exist
 	err := g.Get(
+		context.Background(),
 		dst, testURL("https://www.googleapis.com/storage/v1/hc-go-getter-test/go-getter/folder"))
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -42,6 +44,7 @@ func TestGCSGetter_subdir(t *testing.T) {
 
 	// With a dir that doesn't exist
 	err := g.Get(
+		context.Background(),
 		dst, testURL("https://www.googleapis.com/storage/v1/hc-go-getter-test/go-getter/folder/subfolder"))
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -61,6 +64,7 @@ func TestGCSGetter_GetFile(t *testing.T) {
 
 	// Download
 	err := g.GetFile(
+		context.Background(),
 		dst, testURL("https://www.googleapis.com/storage/v1/hc-go-getter-test/go-getter/folder/main.tf"))
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -80,6 +84,7 @@ func TestGCSGetter_GetGenerationFile(t *testing.T) {
 
 	// Download Previous Version
 	err := g.GetFile(
+		context.Background(),
 		dst, testURL("https://www.googleapis.com/storage/v1/hc-go-getter-test/go-getter/versioned.txt#1664282135302009"))
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -96,6 +101,7 @@ func TestGCSGetter_GetGenerationFile(t *testing.T) {
 
 	// Download Current Version
 	err = g.GetFile(
+		context.Background(),
 		dst, testURL("https://www.googleapis.com/storage/v1/hc-go-getter-test/go-getter/versioned.txt#1664282167903672"))
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -119,6 +125,7 @@ func TestGCSGetter_GetFile_notfound(t *testing.T) {
 
 	// Download
 	err := g.GetFile(
+		context.Background(),
 		dst, testURL("https://www.googleapis.com/storage/v1/hc-go-getter-test/go-getter/folder/404.tf"))
 	if err == nil {
 		t.Fatalf("expected error, got none")
@@ -130,6 +137,7 @@ func TestGCSGetter_ClientMode_dir(t *testing.T) {
 
 	// Check client mode on a key prefix with only a single key.
 	mode, err := g.ClientMode(
+		context.Background(),
 		testURL("https://www.googleapis.com/storage/v1/hc-go-getter-test/go-getter/folder/subfolder"))
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -144,6 +152,7 @@ func TestGCSGetter_ClientMode_file(t *testing.T) {
 
 	// Check client mode on a key prefix which contains sub-keys.
 	mode, err := g.ClientMode(
+		context.Background(),
 		testURL("https://www.googleapis.com/storage/v1/hc-go-getter-test/go-getter/folder/subfolder/sub.tf"))
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -159,6 +168,7 @@ func TestGCSGetter_ClientMode_notfound(t *testing.T) {
 	// Check the client mode when a non-existent key is looked up. This does not
 	// return an error, but rather should just return the file mode.
 	mode, err := g.ClientMode(
+		context.Background(),
 		testURL("https://www.googleapis.com/storage/v1/hc-go-getter-test/go-getter/foobar"))
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -222,6 +232,7 @@ func TestGCSGetter_GetFile_OAuthAccessToken(t *testing.T) {
 
 	// Download
 	err := g.GetFile(
+		context.Background(),
 		dst, testURL("https://www.googleapis.com/storage/v1/hc-go-getter-test/go-getter/folder/main.tf"))
 	if err != nil {
 		t.Fatalf("err: %s", err)

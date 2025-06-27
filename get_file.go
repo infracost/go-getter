@@ -4,6 +4,7 @@
 package getter
 
 import (
+	"context"
 	"net/url"
 	"os"
 )
@@ -19,7 +20,7 @@ type FileGetter struct {
 	Copy bool
 }
 
-func (g *FileGetter) ClientMode(u *url.URL) (ClientMode, error) {
+func (g *FileGetter) ClientMode(_ context.Context, u *url.URL) (ClientMode, error) {
 	path := u.Path
 	if u.RawPath != "" {
 		path = u.RawPath
