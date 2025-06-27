@@ -4,7 +4,6 @@
 package getter
 
 import (
-	"context"
 	"os"
 )
 
@@ -15,10 +14,6 @@ type ClientOption func(*Client) error
 // behavior including context, decompressors, detectors, and getters used by
 // the client.
 func (c *Client) Configure(opts ...ClientOption) error {
-	// If the context has not been configured use the background context.
-	if c.Ctx == nil {
-		c.Ctx = context.Background()
-	}
 
 	// Store the options used to configure this client.
 	c.Options = opts
@@ -50,15 +45,6 @@ func (c *Client) Configure(opts ...ClientOption) error {
 	}
 
 	return nil
-}
-
-// WithContext allows to pass a context to operation
-// in order to be able to cancel a download in progress.
-func WithContext(ctx context.Context) ClientOption {
-	return func(c *Client) error {
-		c.Ctx = ctx
-		return nil
-	}
 }
 
 // WithDecompressors specifies which Decompressor are available.

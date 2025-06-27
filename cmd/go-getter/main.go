@@ -58,7 +58,6 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	// Build the client
 	client := &getter.Client{
-		Ctx:     ctx,
 		Src:     args[0],
 		Dst:     args[1],
 		Pwd:     pwd,
@@ -72,7 +71,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 		defer cancel()
-		if err := client.Get(); err != nil {
+		if err := client.Get(ctx); err != nil {
 			errChan <- err
 		}
 	}()

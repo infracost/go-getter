@@ -4,6 +4,7 @@
 package getter
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
@@ -42,7 +43,7 @@ func (s *FolderStorage) Dir(key string) (d string, e bool, err error) {
 }
 
 // Get implements Storage.Get
-func (s *FolderStorage) Get(key string, source string, update bool) error {
+func (s *FolderStorage) Get(ctx context.Context, key string, source string, update bool) error {
 	dir := s.dir(key)
 	if !update {
 		if _, err := os.Stat(dir); err == nil {
@@ -57,7 +58,7 @@ func (s *FolderStorage) Get(key string, source string, update bool) error {
 	}
 
 	// Get the source. This always forces an update.
-	return Get(dir, source)
+	return Get(ctx, dir, source)
 }
 
 // dir returns the directory name internally that we'll use to map to

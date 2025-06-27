@@ -41,7 +41,7 @@ func TestHttpGetter_header(t *testing.T) {
 	u.Path = "/header"
 
 	// Get it, which should error because it uses the file protocol.
-	err := g.Get(dst, &u)
+	err := g.Get(context.Background(), dst, &u)
 
 	if !strings.Contains(err.Error(), "download not supported for scheme 'file'") {
 		t.Fatalf("unexpected error: %v", err)
@@ -58,7 +58,7 @@ func TestHttpGetter_header(t *testing.T) {
 		Mode: ClientModeDir,
 	}
 
-	err = c.Get()
+	err = c.Get(context.Background())
 
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -89,7 +89,7 @@ func TestHttpGetter_requestHeader(t *testing.T) {
 	u.RawQuery = "expected=X-Foobar"
 
 	// Get it!
-	if err := g.GetFile(dst, &u); err != nil {
+	if err := g.GetFile(context.Background(), dst, &u); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -114,7 +114,7 @@ func TestHttpGetter_meta(t *testing.T) {
 	u.Path = "/meta"
 
 	// Get it, which should error because it uses the file protocol.
-	err := g.Get(dst, &u)
+	err := g.Get(context.Background(), dst, &u)
 
 	if !strings.Contains(err.Error(), "download not supported for scheme 'file'") {
 		t.Fatalf("unexpected error: %v", err)
@@ -131,7 +131,7 @@ func TestHttpGetter_meta(t *testing.T) {
 		Mode: ClientModeDir,
 	}
 
-	err = c.Get()
+	err = c.Get(context.Background())
 
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -158,7 +158,7 @@ func TestHttpGetter_metaSubdir(t *testing.T) {
 	u.Path = "/meta-subdir"
 
 	// Get it!
-	if err := g.Get(dst, &u); err != nil {
+	if err := g.Get(context.Background(), dst, &u); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -183,7 +183,7 @@ func TestHttpGetter_metaSubdirGlob(t *testing.T) {
 	u.Path = "/meta-subdir-glob"
 
 	// Get it!
-	if err := g.Get(dst, &u); err != nil {
+	if err := g.Get(context.Background(), dst, &u); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -208,7 +208,7 @@ func TestHttpGetter_none(t *testing.T) {
 	u.Path = "/none"
 
 	// Get it!
-	if err := g.Get(dst, &u); err == nil {
+	if err := g.Get(context.Background(), dst, &u); err == nil {
 		t.Fatal("should error")
 	}
 }
@@ -249,7 +249,7 @@ func TestHttpGetter_resume(t *testing.T) {
 	t.Logf("url: %s", u.String())
 
 	// Finish getting it!
-	if err := GetFile(dst, u.String()); err != nil {
+	if err := GetFile(context.Background(), dst, u.String()); err != nil {
 		t.Fatalf("finishing download should not error: %v", err)
 	}
 
@@ -263,7 +263,7 @@ func TestHttpGetter_resume(t *testing.T) {
 	}
 
 	// Get it again
-	if err := GetFile(dst, u.String()); err != nil {
+	if err := GetFile(context.Background(), dst, u.String()); err != nil {
 		t.Fatalf("should not error: %v", err)
 	}
 }
@@ -305,7 +305,7 @@ func TestHttpGetter_resumeNoRange(t *testing.T) {
 	t.Logf("url: %s", u.String())
 
 	// Finish getting it!
-	if err := GetFile(dst, u.String()); err != nil {
+	if err := GetFile(context.Background(), dst, u.String()); err != nil {
 		t.Fatalf("finishing download should not error: %v", err)
 	}
 
@@ -333,7 +333,7 @@ func TestHttpGetter_file(t *testing.T) {
 	u.Path = "/file"
 
 	// Get it!
-	if err := g.GetFile(dst, &u); err != nil {
+	if err := g.GetFile(context.Background(), dst, &u); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -355,7 +355,7 @@ func TestHttpGetter_http2server(t *testing.T) {
 	}
 	dst := tempTestFile(t)
 
-	err = g.GetFile(dst, src)
+	err = g.GetFile(context.Background(), dst, src)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,7 +376,7 @@ func TestHttpGetter_auth(t *testing.T) {
 	u.User = url.UserPassword("foo", "bar")
 
 	// Get it, which should error because it uses the file protocol.
-	err := g.Get(dst, &u)
+	err := g.Get(context.Background(), dst, &u)
 
 	if !strings.Contains(err.Error(), "download not supported for scheme 'file'") {
 		t.Fatalf("unexpected error: %v", err)
@@ -393,7 +393,7 @@ func TestHttpGetter_auth(t *testing.T) {
 		Mode: ClientModeDir,
 	}
 
-	err = c.Get()
+	err = c.Get(context.Background())
 
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -419,7 +419,7 @@ func TestHttpGetter_authNetrc(t *testing.T) {
 	defer tempEnv(t, "NETRC", path)()
 
 	// Get it, which should error because it uses the file protocol.
-	err := g.Get(dst, &u)
+	err := g.Get(context.Background(), dst, &u)
 
 	if !strings.Contains(err.Error(), "download not supported for scheme 'file'") {
 		t.Fatalf("unexpected error: %v", err)
@@ -436,7 +436,7 @@ func TestHttpGetter_authNetrc(t *testing.T) {
 		Mode: ClientModeDir,
 	}
 
-	err = c.Get()
+	err = c.Get(context.Background())
 
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -477,7 +477,7 @@ func TestHttpGetter_cleanhttp(t *testing.T) {
 	u.Path = "/header"
 
 	// Get it, which should error because it uses the file protocol.
-	err := g.Get(dst, &u)
+	err := g.Get(context.Background(), dst, &u)
 
 	if !strings.Contains(err.Error(), "download not supported for scheme 'file'") {
 		t.Fatalf("unexpected error: %v", err)
@@ -494,7 +494,7 @@ func TestHttpGetter_cleanhttp(t *testing.T) {
 		Mode: ClientModeDir,
 	}
 
-	err = c.Get()
+	err = c.Get(context.Background())
 
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -524,14 +524,11 @@ func TestHttpGetter__RespectsContextCanceled(t *testing.T) {
 	}
 
 	g := new(HttpGetter)
-	g.client = &Client{
-		Ctx: ctx,
-	}
 	g.Client = &http.Client{
 		Transport: &rt,
 	}
 
-	err := g.Get(dst, &u)
+	err := g.Get(ctx, dst, &u)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled, got: %v", err)
 	}
@@ -551,12 +548,9 @@ func TestHttpGetter__XTerraformGetLimit(t *testing.T) {
 
 	g := new(HttpGetter)
 	g.XTerraformGetLimit = 10
-	g.client = &Client{
-		Ctx: ctx,
-	}
 	g.Client = &http.Client{}
 
-	err := g.Get(dst, &u)
+	err := g.Get(ctx, dst, &u)
 	if !strings.Contains(err.Error(), "too many X-Terraform-Get redirects") {
 		t.Fatalf("too many X-Terraform-Get redirects, got: %v", err)
 	}
@@ -576,12 +570,9 @@ func TestHttpGetter__XTerraformGetDisabled(t *testing.T) {
 
 	g := new(HttpGetter)
 	g.XTerraformGetDisabled = true
-	g.client = &Client{
-		Ctx: ctx,
-	}
 	g.Client = &http.Client{}
 
-	err := g.Get(dst, &u)
+	err := g.Get(ctx, dst, &u)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -610,7 +601,6 @@ func TestHttpGetter__XTerraformGetDetected(t *testing.T) {
 	dst := tempDir(t)
 
 	c := &Client{
-		Ctx:  ctx,
 		Src:  u.String(),
 		Dst:  dst,
 		Mode: ClientModeDir,
@@ -622,7 +612,7 @@ func TestHttpGetter__XTerraformGetDetected(t *testing.T) {
 		},
 	}
 
-	err := c.Get()
+	err := c.Get(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -660,7 +650,6 @@ func TestHttpGetter__XTerraformGetProxyBypass(t *testing.T) {
 	}
 
 	client := &Client{
-		Ctx: ctx,
 		Getters: map[string]Getter{
 			"http": httpGetter,
 		},
@@ -669,7 +658,7 @@ func TestHttpGetter__XTerraformGetProxyBypass(t *testing.T) {
 	client.Src = u.String()
 	client.Dst = dst
 
-	err = client.Get()
+	err = client.Get(ctx)
 	if err != nil {
 		t.Logf("client get error: %v", err)
 	}
@@ -701,7 +690,6 @@ func TestHttpGetter__XTerraformGetConfiguredGettersBypass(t *testing.T) {
 	}
 
 	client := &Client{
-		Ctx:  ctx,
 		Mode: ClientModeDir,
 		Getters: map[string]Getter{
 			"http": httpGetter,
@@ -713,7 +701,7 @@ func TestHttpGetter__XTerraformGetConfiguredGettersBypass(t *testing.T) {
 	client.Src = u.String()
 	client.Dst = dst
 
-	err := client.Get()
+	err := client.Get(ctx)
 	if err != nil {
 		if !strings.Contains(err.Error(), "no getter available for X-Terraform-Get source protocol") {
 			t.Fatalf("expected no getter available for X-Terraform-Get source protocol, got: %v", err)
@@ -738,7 +726,6 @@ func TestHttpGetter__endless_body(t *testing.T) {
 	httpGetter.DoNotCheckHeadFirst = true
 
 	client := &Client{
-		Ctx:  ctx,
 		Mode: ClientModeFile,
 		Getters: map[string]Getter{
 			"http": httpGetter,
@@ -750,7 +737,7 @@ func TestHttpGetter__endless_body(t *testing.T) {
 	client.Src = u.String()
 	client.Dst = dst
 
-	err := client.Get()
+	err := client.Get(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -784,7 +771,7 @@ func TestHttpGetter_subdirLink(t *testing.T) {
 		},
 	}
 
-	err = client.Get()
+	err = client.Get(context.Background())
 	if err != nil {
 		t.Fatalf("get err: %v", err)
 	}

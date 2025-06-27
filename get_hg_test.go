@@ -4,6 +4,7 @@
 package getter
 
 import (
+	"context"
 	"net/url"
 	"os"
 	"os/exec"
@@ -34,7 +35,7 @@ func TestHgGetter(t *testing.T) {
 	dst := tempDir(t)
 
 	// With a dir that doesn't exist
-	if err := g.Get(dst, testModuleURL("basic-hg")); err != nil {
+	if err := g.Get(context.Background(), dst, testModuleURL("basic-hg")); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -59,7 +60,7 @@ func TestHgGetter_branch(t *testing.T) {
 	q.Add("rev", "test-branch")
 	url.RawQuery = q.Encode()
 
-	if err := g.Get(dst, url); err != nil {
+	if err := g.Get(context.Background(), dst, url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -70,7 +71,7 @@ func TestHgGetter_branch(t *testing.T) {
 	}
 
 	// Get again should work
-	if err := g.Get(dst, url); err != nil {
+	if err := g.Get(context.Background(), dst, url); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -92,7 +93,7 @@ func TestHgGetter_GetFile(t *testing.T) {
 	defer os.RemoveAll(filepath.Dir(dst))
 
 	// Download
-	if err := g.GetFile(dst, testModuleURL("basic-hg/foo.txt")); err != nil {
+	if err := g.GetFile(context.Background(), dst, testModuleURL("basic-hg/foo.txt")); err != nil {
 		t.Fatalf("err: %s", err)
 	}
 
@@ -114,7 +115,7 @@ func TestHgGetter_HgArgumentsNotAllowed(t *testing.T) {
 	// If arguments are allowed in the destination, this Get call will fail
 	dst := "--config=alias.clone=!false"
 	defer os.RemoveAll(dst)
-	err := g.Get(dst, testModuleURL("basic-hg"))
+	err := g.Get(context.Background(), dst, testModuleURL("basic-hg"))
 	if err != nil {
 		t.Fatalf("Expected no err, got: %s", err)
 	}
@@ -124,7 +125,7 @@ func TestHgGetter_HgArgumentsNotAllowed(t *testing.T) {
 	// This clone call will fail regardless, but an exit code of 1 indicates
 	// that the `false` command executed
 	// We are expecting an hg parse error
-	err = g.Get(dst, testModuleURL("basic-hg?rev=--config=alias.update=!false"))
+	err = g.Get(context.Background(), dst, testModuleURL("basic-hg?rev=--config=alias.update=!false"))
 	if err != nil {
 		if !strings.Contains(err.Error(), "hg: parse error") {
 			t.Fatalf("Expected no err, got: %s", err)
@@ -136,7 +137,7 @@ func TestHgGetter_HgArgumentsNotAllowed(t *testing.T) {
 	// This Get call will fail regardless, but it should fail
 	// because the repository can't be found.
 	// Other failures indicate that hg interpretted the argument passed in the URL
-	err = g.Get(dst, &url.URL{Path: "--config=alias.clone=false"})
+	err = g.Get(context.Background(), dst, &url.URL{Path: "--config=alias.clone=false"})
 	if err != nil {
 		if !strings.Contains(err.Error(), "repository --config=alias.clone=false not found") {
 			t.Fatalf("Expected no err, got: %s", err)

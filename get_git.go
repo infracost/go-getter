@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
 	urlhelper "github.com/hashicorp/go-getter/helper/url"
 	safetemp "github.com/hashicorp/go-safetemp"
@@ -28,27 +27,16 @@ import (
 // a git repository.
 type GitGetter struct {
 	getter
-
-	// Timeout sets a deadline which all git CLI operations should
-	// complete within. Zero value means no timeout.
-	Timeout time.Duration
 }
 
 var defaultBranchRegexp = regexp.MustCompile(`\s->\sorigin/(.*)`)
 var lsRemoteSymRefRegexp = regexp.MustCompile(`ref: refs/heads/([^\s]+).*`)
 
-func (g *GitGetter) ClientMode(_ *url.URL) (ClientMode, error) {
+func (g *GitGetter) ClientMode(_ context.Context, u *url.URL) (ClientMode, error) {
 	return ClientModeDir, nil
 }
 
-func (g *GitGetter) Get(dst string, u *url.URL) error {
-	ctx := g.Context()
-
-	if g.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, g.Timeout)
-		defer cancel()
-	}
+func (g *GitGetter) Get(ctx context.Context, dst string, u *url.URL) error {
 
 	if _, err := exec.LookPath("git"); err != nil {
 		return fmt.Errorf("git must be available and on the PATH")
@@ -156,7 +144,7 @@ func (g *GitGetter) Get(dst string, u *url.URL) error {
 
 // GetFile for Git doesn't support updating at this time. It will download
 // the file every time.
-func (g *GitGetter) GetFile(dst string, u *url.URL) error {
+func (g *GitGetter) GetFile(ctx context.Context, dst string, u *url.URL) error {
 	td, tdcloser, err := safetemp.Dir("", "getter")
 	if err != nil {
 		return err
@@ -169,7 +157,7 @@ func (g *GitGetter) GetFile(dst string, u *url.URL) error {
 	u.Path = filepath.Dir(u.Path)
 
 	// Get the full repository
-	if err := g.Get(td, u); err != nil {
+	if err := g.Get(ctx, td, u); err != nil {
 		return err
 	}
 
@@ -180,7 +168,7 @@ func (g *GitGetter) GetFile(dst string, u *url.URL) error {
 	}
 
 	fg := &FileGetter{Copy: true}
-	return fg.GetFile(dst, u)
+	return fg.GetFile(ctx, dst, u)
 }
 
 func (g *GitGetter) checkout(ctx context.Context, dst string, ref string) error {
