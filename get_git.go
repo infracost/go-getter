@@ -121,7 +121,7 @@ func (g *GitGetter) Get(ctx context.Context, dst string, u *url.URL) error {
 		return err
 	}
 	if err == nil {
-		err = g.update(ctx, dst, sshKeyFile, u, ref, depth)
+		err = g.update(ctx, dst, sshKeyFile, u, ref, depth, subdir)
 	} else {
 		err = g.clone(ctx, dst, sshKeyFile, u, ref, depth, subdir)
 	}
@@ -212,6 +212,7 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 	setupGitEnv(cmd, sshKeyFile)
 	err := getRunCommand(cmd)
 	if err != nil {
+		_ = os.RemoveAll(dst)
 		if depth > 0 && originalRef != "" {
 			// If we're creating a shallow clone then the given ref must be
 			// a named ref (branch or tag) rather than a commit directly.
@@ -230,6 +231,7 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 		cmd.Dir = dst
 		err = getRunCommand(cmd)
 		if err != nil {
+			_ = os.RemoveAll(dst)
 			return err
 		}
 
@@ -239,6 +241,7 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 			cmd.Dir = dst
 			err = getRunCommand(cmd)
 			if err != nil {
+				_ = os.RemoveAll(dst)
 				return err
 			}
 		}
@@ -250,11 +253,16 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 			cmd.Dir = dst
 			err = getRunCommand(cmd)
 			if err != nil {
+				_ = os.RemoveAll(dst)
 				return err
 			}
 		}
 
-		return g.checkout(ctx, dst, ref)
+		if err := g.checkout(ctx, dst, ref); err != nil {
+			_ = os.RemoveAll(dst)
+			return err
+		}
+		return nil
 	}
 
 	if depth < 1 && originalRef != "" {
@@ -271,7 +279,7 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 	return nil
 }
 
-func (g *GitGetter) update(ctx context.Context, dst, sshKeyFile string, u *url.URL, ref string, depth int) error {
+func (g *GitGetter) update(ctx context.Context, dst, sshKeyFile string, u *url.URL, ref string, depth int, subdir string) error {
 	// Remove all variations of .git directories
 	err := removeCaseInsensitiveGitDirectory(dst)
 	if err != nil {
@@ -295,7 +303,14 @@ func (g *GitGetter) update(ctx context.Context, dst, sshKeyFile string, u *url.U
 	}
 
 	// Fetch the remote ref
-	cmd = exec.CommandContext(ctx, "git", "fetch", "--tags")
+	fetchTagsArgs := []string{"fetch", "--tags"}
+	if depth > 0 {
+		fetchTagsArgs = append(fetchTagsArgs, "--depth", strconv.Itoa(depth))
+	}
+	if subdir != "" {
+		fetchTagsArgs = append(fetchTagsArgs, "--filter=blob:none")
+	}
+	cmd = exec.CommandContext(ctx, "git", fetchTagsArgs...)
 	cmd.Dir = dst
 	err = getRunCommand(cmd)
 	if err != nil {
@@ -303,7 +318,15 @@ func (g *GitGetter) update(ctx context.Context, dst, sshKeyFile string, u *url.U
 	}
 
 	// Fetch the remote ref
-	cmd = exec.CommandContext(ctx, "git", "fetch", "origin", "--", ref)
+	fetchArgs := []string{"fetch", "origin"}
+	if depth > 0 {
+		fetchArgs = append(fetchArgs, "--depth", strconv.Itoa(depth))
+	}
+	if subdir != "" {
+		fetchArgs = append(fetchArgs, "--filter=blob:none")
+	}
+	fetchArgs = append(fetchArgs, "--", ref)
+	cmd = exec.CommandContext(ctx, "git", fetchArgs...)
 	cmd.Dir = dst
 	err = getRunCommand(cmd)
 	if err != nil {
@@ -316,6 +339,15 @@ func (g *GitGetter) update(ctx context.Context, dst, sshKeyFile string, u *url.U
 	err = getRunCommand(cmd)
 	if err != nil {
 		return err
+	}
+
+	// Set up sparse checkout if subdir is specified
+	if subdir != "" {
+		cmd = exec.CommandContext(ctx, "git", "sparse-checkout", "set", subdir)
+		cmd.Dir = dst
+		if err := getRunCommand(cmd); err != nil {
+			return err
+		}
 	}
 
 	// Checkout ref branch
