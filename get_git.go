@@ -302,19 +302,17 @@ func (g *GitGetter) update(ctx context.Context, dst, sshKeyFile string, u *url.U
 		return err
 	}
 
-	// Fetch the remote ref
-	fetchTagsArgs := []string{"fetch", "--tags"}
-	if depth > 0 {
-		fetchTagsArgs = append(fetchTagsArgs, "--depth", strconv.Itoa(depth))
-	}
-	if subdir != "" {
-		fetchTagsArgs = append(fetchTagsArgs, "--filter=blob:none")
-	}
-	cmd = exec.CommandContext(ctx, "git", fetchTagsArgs...)
-	cmd.Dir = dst
-	err = getRunCommand(cmd)
-	if err != nil {
-		return err
+	// Fetch all tags so that tag-based refs can be resolved during checkout.
+	// Skip this when depth > 0 because --tags fetches every tag reference
+	// (e.g. 11k+ tags in large repos) regardless of --depth, and we already
+	// fetch the specific ref we need below.
+	if depth <= 0 {
+		cmd = exec.CommandContext(ctx, "git", "fetch", "--tags")
+		cmd.Dir = dst
+		err = getRunCommand(cmd)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Fetch the remote ref
