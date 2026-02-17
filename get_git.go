@@ -238,7 +238,7 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 
 		// If the commit is a long commit sha then we can fetch it
 		if isCommitID && len(ref) == 40 {
-			cmd = exec.CommandContext(ctx, "git", "fetch", "origin", ref, "--depth", "1")
+			cmd = exec.CommandContext(ctx, "git", "fetch", "origin", ref, "--depth", "1", "--no-tags")
 			cmd.Dir = dst
 			err = getRunCommand(cmd)
 			if err != nil {
@@ -250,7 +250,7 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 		// If the commit is a short commit sha then we will need to fetch the full history to find the commit
 		// since we can't fetch a commit by short sha
 		if isCommitID && len(ref) < 40 {
-			cmd = exec.CommandContext(ctx, "git", "fetch", "--unshallow", "--filter=blob:none")
+			cmd = exec.CommandContext(ctx, "git", "fetch", "--unshallow", "--filter=blob:none", "--no-tags")
 			cmd.Dir = dst
 			err = getRunCommand(cmd)
 			if err != nil {
