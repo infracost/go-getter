@@ -204,6 +204,7 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 		args = append(args, "--filter=blob:none")
 		args = append(args, "--sparse")
 		args = append(args, "--no-checkout")
+		args = append(args, "--no-tags")
 	}
 
 	args = append(args, "--", u.String(), dst)
@@ -322,6 +323,7 @@ func (g *GitGetter) update(ctx context.Context, dst, sshKeyFile string, u *url.U
 	}
 	if subdir != "" {
 		fetchArgs = append(fetchArgs, "--filter=blob:none")
+		fetchArgs = append(fetchArgs, "--no-tags")
 	}
 	fetchArgs = append(fetchArgs, "--", ref)
 	cmd = exec.CommandContext(ctx, "git", fetchArgs...)
