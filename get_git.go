@@ -247,16 +247,39 @@ func (g *GitGetter) clone(ctx context.Context, dst, sshKeyFile string, u *url.UR
 			}
 		}
 
-		// If the commit is a short commit sha then we will need to fetch the full history to find the commit
-		// since we can't fetch a commit by short sha
+		// If the commit is a short commit sha then we will need to fetch the
+		// commit graph to resolve it to a full hash. We use --filter=tree:0
+		// to fetch only commit objects (no trees or blobs), which is much
+		// smaller than --filter=blob:none. Once resolved, we fetch just that
+		// single commit with its trees via sparse checkout.
 		if isCommitID && len(ref) < 40 {
-			cmd = exec.CommandContext(ctx, "git", "fetch", "--unshallow", "--filter=blob:none", "--no-tags")
+			cmd = exec.CommandContext(ctx, "git", "fetch", "--unshallow", "--filter=tree:0", "--no-tags")
 			cmd.Dir = dst
 			err = getRunCommand(cmd)
 			if err != nil {
 				_ = os.RemoveAll(dst)
 				return err
 			}
+
+			// Resolve the short hash to a full hash
+			cmd = exec.CommandContext(ctx, "git", "rev-parse", "--verify", ref)
+			cmd.Dir = dst
+			out, err := cmd.Output()
+			if err != nil {
+				_ = os.RemoveAll(dst)
+				return err
+			}
+			fullRef := strings.TrimSpace(string(out))
+
+			// Now fetch just that commit with depth 1 to get trees/blobs
+			// for the sparse checkout
+			cmd = exec.CommandContext(ctx, "git", "fetch", "origin", fullRef, "--depth", "1", "--no-tags")
+			cmd.Dir = dst
+			if err := getRunCommand(cmd); err != nil {
+				_ = os.RemoveAll(dst)
+				return err
+			}
+			ref = fullRef
 		}
 
 		if err := g.checkout(ctx, dst, ref); err != nil {
@@ -356,16 +379,23 @@ func (g *GitGetter) update(ctx context.Context, dst, sshKeyFile string, u *url.U
 		return err
 	}
 
-	// Pull the latest changes from the ref branch
-	if depth > 0 {
-		cmd = exec.CommandContext(ctx, "git", "pull", "origin", "--depth", strconv.Itoa(depth), "--ff-only", "--", ref)
-	} else {
-		cmd = exec.CommandContext(ctx, "git", "pull", "origin", "--ff-only", "--", ref)
+	// Pull the latest changes from the ref branch.
+	// Skip this when subdir is set because we've already fetched the exact
+	// ref we need above, and pull would re-fetch without --no-tags/--filter,
+	// defeating our sparse/shallow optimisations.
+	if subdir == "" {
+		if depth > 0 {
+			cmd = exec.CommandContext(ctx, "git", "pull", "origin", "--depth", strconv.Itoa(depth), "--ff-only", "--", ref)
+		} else {
+			cmd = exec.CommandContext(ctx, "git", "pull", "origin", "--ff-only", "--", ref)
+		}
+
+		cmd.Dir = dst
+		setupGitEnv(cmd, sshKeyFile)
+		return getRunCommand(cmd)
 	}
 
-	cmd.Dir = dst
-	setupGitEnv(cmd, sshKeyFile)
-	return getRunCommand(cmd)
+	return nil
 }
 
 // fetchSubmodules downloads any configured submodules recursively.
