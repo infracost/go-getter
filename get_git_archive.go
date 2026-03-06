@@ -13,6 +13,11 @@ import (
 	safetemp "github.com/hashicorp/go-safetemp"
 )
 
+// archiveURLOverride, when non-empty, replaces the URL that fetchArchive
+// downloads from. This exists so that tests can point at a local httptest
+// server without needing a real hosting platform.
+var archiveURLOverride string
+
 // fetchArchive downloads a tarball archive of the given commit from the
 // hosting platform's HTTP API and extracts it to dst. This is used as a
 // fallback when git-fetch cannot retrieve a commit (e.g. orphaned commits
@@ -26,9 +31,13 @@ import (
 // If subdir is non-empty, only files under that subdirectory are placed in
 // dst. The resulting directory is NOT a git repository.
 func fetchArchive(ctx context.Context, dst string, u *url.URL, ref string, subdir string) error {
-	aURL, err := archiveURL(u, ref)
-	if err != nil {
-		return err
+	aURL := archiveURLOverride
+	if aURL == "" {
+		var err error
+		aURL, err = archiveURL(u, ref)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Parse the archive URL so we can attach credentials.
@@ -54,7 +63,7 @@ func fetchArchive(ctx context.Context, dst string, u *url.URL, ref string, subdi
 	if archiveParsed.User != nil {
 		password, _ := archiveParsed.User.Password()
 		req.SetBasicAuth(archiveParsed.User.Username(), password)
-	} else if token := tokenFromEnv(archiveParsed.Host); token != "" {
+	} else if token := tokenFromEnv(u.Host); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
@@ -65,7 +74,7 @@ func fetchArchive(ctx context.Context, dst string, u *url.URL, ref string, subdi
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download archive from %s: HTTP %d", aURL, resp.StatusCode)
+		return fmt.Errorf("failed to download archive (%s) from %s: HTTP %d", aURL, resp.StatusCode)
 	}
 
 	// The tarball contains a single top-level directory (e.g. "repo-sha/").

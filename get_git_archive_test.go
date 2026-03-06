@@ -1,7 +1,15 @@
 package getter
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -224,5 +232,274 @@ func TestTokenFromEnv(t *testing.T) {
 				t.Errorf("tokenFromEnv(%q) = %q, want %q", tt.host, got, tt.want)
 			}
 		})
+	}
+}
+
+// buildTestTarGz creates a .tar.gz archive in memory with the given files
+// nested under a top-level directory (mimicking GitHub/GitLab/Bitbucket
+// archive layout). The files map is relative path → content.
+func buildTestTarGz(t *testing.T, topDir string, files map[string]string) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+
+	// Write top-level directory entry.
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     topDir + "/",
+		Typeflag: tar.TypeDir,
+		Mode:     0755,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for path, content := range files {
+		fullPath := topDir + "/" + path
+
+		// Create parent directory entries.
+		dir := filepath.Dir(fullPath)
+		if dir != topDir {
+			if err := tw.WriteHeader(&tar.Header{
+				Name:     dir + "/",
+				Typeflag: tar.TypeDir,
+				Mode:     0755,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if err := tw.WriteHeader(&tar.Header{
+			Name:     fullPath,
+			Size:     int64(len(content)),
+			Typeflag: tar.TypeReg,
+			Mode:     0644,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// setArchiveOverride sets archiveURLOverride for the duration of the test
+// and restores it when the test completes.
+func setArchiveOverride(t *testing.T, url string) {
+	t.Helper()
+	old := archiveURLOverride
+	archiveURLOverride = url
+	t.Cleanup(func() { archiveURLOverride = old })
+}
+
+func TestFetchArchive(t *testing.T) {
+	archive := buildTestTarGz(t, "repo-abc1234", map[string]string{
+		"main.tf":       "resource \"null\" \"a\" {}",
+		"modules/m.tf":  "resource \"null\" \"b\" {}",
+		"README.md":     "hello",
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(archive)
+	}))
+	defer srv.Close()
+
+	setArchiveOverride(t, srv.URL+"/test/repo/archive/abc1234.tar.gz")
+
+	u, _ := url.Parse("https://github.com/test/repo.git")
+	dst := filepath.Join(t.TempDir(), "dst")
+
+	err := fetchArchive(context.Background(), dst, u, "abc1234", "")
+	if err != nil {
+		t.Fatalf("fetchArchive() error: %v", err)
+	}
+
+	// Verify all files were extracted.
+	for _, file := range []string{"main.tf", "modules/m.tf", "README.md"} {
+		path := filepath.Join(dst, file)
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("expected file %q not found: %v", file, err)
+		}
+	}
+
+	// Verify content.
+	got, err := os.ReadFile(filepath.Join(dst, "main.tf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "resource \"null\" \"a\" {}" {
+		t.Errorf("main.tf content = %q, want %q", got, "resource \"null\" \"a\" {}")
+	}
+}
+
+func TestFetchArchive_subdir(t *testing.T) {
+	archive := buildTestTarGz(t, "repo-abc1234", map[string]string{
+		"main.tf":       "root",
+		"modules/m.tf":  "module",
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(archive)
+	}))
+	defer srv.Close()
+
+	setArchiveOverride(t, srv.URL+"/test/repo/archive/abc1234.tar.gz")
+
+	u, _ := url.Parse("https://github.com/test/repo.git")
+	dst := filepath.Join(t.TempDir(), "dst")
+
+	err := fetchArchive(context.Background(), dst, u, "abc1234", "modules")
+	if err != nil {
+		t.Fatalf("fetchArchive() error: %v", err)
+	}
+
+	// The subdir contents should be at the root of dst.
+	got, err := os.ReadFile(filepath.Join(dst, "m.tf"))
+	if err != nil {
+		t.Fatalf("expected modules/m.tf at dst root: %v", err)
+	}
+	if string(got) != "module" {
+		t.Errorf("m.tf content = %q, want %q", got, "module")
+	}
+
+	// Root-level files should not be present.
+	if _, err := os.Stat(filepath.Join(dst, "main.tf")); err == nil {
+		t.Error("main.tf should not exist in dst when subdir is set")
+	}
+}
+
+func TestFetchArchive_subdir_not_found(t *testing.T) {
+	archive := buildTestTarGz(t, "repo-abc1234", map[string]string{
+		"main.tf": "root",
+	})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(archive)
+	}))
+	defer srv.Close()
+
+	setArchiveOverride(t, srv.URL+"/test/repo/archive/abc1234.tar.gz")
+
+	u, _ := url.Parse("https://github.com/test/repo.git")
+	dst := filepath.Join(t.TempDir(), "dst")
+
+	err := fetchArchive(context.Background(), dst, u, "abc1234", "nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent subdir")
+	}
+}
+
+func TestFetchArchive_http_error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	setArchiveOverride(t, srv.URL+"/test/repo/archive/abc1234.tar.gz")
+
+	u, _ := url.Parse("https://github.com/test/repo.git")
+	dst := filepath.Join(t.TempDir(), "dst")
+
+	err := fetchArchive(context.Background(), dst, u, "abc1234", "")
+	if err == nil {
+		t.Fatal("expected error for HTTP 404")
+	}
+}
+
+func TestFetchArchive_bearer_token(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		// Return a valid archive so fetchArchive doesn't error on extraction.
+		archive := buildTestTarGz(t, "repo-abc1234", map[string]string{
+			"main.tf": "hello",
+		})
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(archive)
+	}))
+	defer srv.Close()
+
+	setArchiveOverride(t, srv.URL+"/test/repo/archive/abc1234.tar.gz")
+	t.Setenv("GH_TOKEN", "test-token-123")
+
+	u, _ := url.Parse("https://github.com/test/repo.git")
+	dst := filepath.Join(t.TempDir(), "dst")
+
+	err := fetchArchive(context.Background(), dst, u, "abc1234", "")
+	if err != nil {
+		t.Fatalf("fetchArchive() error: %v", err)
+	}
+
+	want := "Bearer test-token-123"
+	if gotAuth != want {
+		t.Errorf("Authorization header = %q, want %q", gotAuth, want)
+	}
+}
+
+func TestFetchArchive_basic_auth_from_url(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		archive := buildTestTarGz(t, "repo-abc1234", map[string]string{
+			"main.tf": "hello",
+		})
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(archive)
+	}))
+	defer srv.Close()
+
+	setArchiveOverride(t, srv.URL+"/test/repo/archive/abc1234.tar.gz")
+
+	u, _ := url.Parse("https://myuser:mytoken@github.com/test/repo.git")
+	dst := filepath.Join(t.TempDir(), "dst")
+
+	err := fetchArchive(context.Background(), dst, u, "abc1234", "")
+	if err != nil {
+		t.Fatalf("fetchArchive() error: %v", err)
+	}
+
+	if gotAuth == "" {
+		t.Fatal("expected Authorization header to be set from URL userinfo")
+	}
+}
+
+func TestFetchArchive_skips_git_ssh_user(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		archive := buildTestTarGz(t, "repo-abc1234", map[string]string{
+			"main.tf": "hello",
+		})
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(archive)
+	}))
+	defer srv.Close()
+
+	setArchiveOverride(t, srv.URL+"/test/repo/archive/abc1234.tar.gz")
+	// Clear env tokens so we can verify "git" user was skipped and no auth is set.
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	u, _ := url.Parse("ssh://git@github.com/test/repo.git")
+	dst := filepath.Join(t.TempDir(), "dst")
+
+	err := fetchArchive(context.Background(), dst, u, "abc1234", "")
+	if err != nil {
+		t.Fatalf("fetchArchive() error: %v", err)
+	}
+
+	if gotAuth != "" {
+		t.Errorf("expected no Authorization header for git@ SSH user, got %q", gotAuth)
 	}
 }
