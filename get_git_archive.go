@@ -62,7 +62,7 @@ func fetchArchive(ctx context.Context, dst string, u *url.URL, ref string, subdi
 	if err != nil {
 		return fmt.Errorf("failed to download archive from %s: %w", aURL, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to download archive from %s: HTTP %d", aURL, resp.StatusCode)
