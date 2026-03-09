@@ -1,16 +1,16 @@
 package getter
 
 import (
+	"archive/tar"
 	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-
-	safetemp "github.com/hashicorp/go-safetemp"
 )
 
 // archiveURLOverride, when non-empty, replaces the URL that fetchArchive
@@ -74,16 +74,8 @@ func fetchArchive(ctx context.Context, dst string, u *url.URL, ref string, subdi
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to download archive (%s) from %s: HTTP %d", aURL, resp.StatusCode)
+		return fmt.Errorf("failed to download archive (%s): HTTP %d", aURL, resp.StatusCode)
 	}
-
-	// The tarball contains a single top-level directory (e.g. "repo-sha/").
-	// We extract into a temp directory first, then move the contents into dst.
-	td, tdcloser, err := safetemp.Dir("", "go-getter-archive")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tdcloser.Close() }()
 
 	gzipR, err := gzip.NewReader(resp.Body)
 	if err != nil {
@@ -91,37 +83,94 @@ func fetchArchive(ctx context.Context, dst string, u *url.URL, ref string, subdi
 	}
 	defer func() { _ = gzipR.Close() }()
 
-	if err := untar(gzipR, td, aURL, true, 0, 0, 0); err != nil {
+	if err := extractArchive(gzipR, dst, subdir); err != nil {
 		return fmt.Errorf("failed to extract archive: %w", err)
 	}
 
-	// Find the single top-level directory that the archive extracted into.
-	entries, err := os.ReadDir(td)
-	if err != nil {
-		return err
-	}
-	if len(entries) == 0 {
-		return fmt.Errorf("archive contained no files")
+	return nil
+}
+
+// extractArchive reads a tar stream and extracts its contents into dst. The
+// archive is expected to contain a single top-level directory (e.g.
+// "repo-sha/") which is stripped from all paths. If subdir is non-empty, only
+// entries under that subdirectory are extracted, and the subdir path is
+// preserved relative to dst.
+//
+// This does not reuse the shared untar helper because hosting-platform
+// archives require stripping the top-level directory and filtering by subdir,
+// neither of which untar supports. Adding those concerns to untar would
+// complicate a function shared by all tar-based decompressors.
+func extractArchive(r io.Reader, dst string, subdir string) error {
+	tarR := tar.NewReader(r)
+	topDir := ""
+	found := false
+
+	for {
+		hdr, err := tarR.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		if hdr.Typeflag == tar.TypeXGlobalHeader || hdr.Typeflag == tar.TypeXHeader {
+			continue
+		}
+
+		// Disallow parent traversal.
+		if containsDotDot(hdr.Name) {
+			return fmt.Errorf("entry contains '..': %s", hdr.Name)
+		}
+
+		// Discover and strip the top-level directory.
+		if topDir == "" {
+			topDir = strings.SplitN(hdr.Name, "/", 2)[0] + "/"
+		}
+		rel := strings.TrimPrefix(hdr.Name, topDir)
+		if rel == "" {
+			// This is the top-level directory entry itself; skip it.
+			continue
+		}
+
+		// If a subdir filter is set, skip entries outside it.
+		if subdir != "" {
+			subdirPrefix := strings.TrimRight(subdir, "/") + "/"
+			if !strings.HasPrefix(rel, subdirPrefix) {
+				continue
+			}
+		}
+
+		found = true
+		outPath := filepath.Join(dst, filepath.FromSlash(rel))
+
+		if hdr.FileInfo().IsDir() {
+			if err := os.MkdirAll(outPath, 0755); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Ensure parent directory exists.
+		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+			return err
+		}
+
+		if err := copyReader(outPath, tarR, hdr.FileInfo().Mode(), 0, 0); err != nil {
+			return err
+		}
 	}
 
-	srcDir := filepath.Join(td, entries[0].Name())
-	if subdir != "" {
-		srcDir = filepath.Join(srcDir, subdir)
-	}
-
-	if _, err := os.Stat(srcDir); err != nil {
+	if subdir != "" && !found {
 		return fmt.Errorf("path %q not found in archive", subdir)
 	}
 
-	if err := os.MkdirAll(dst, 0755); err != nil {
-		return err
-	}
-
-	return copyDir(ctx, dst, srcDir, false, false, 0)
+	return nil
 }
 
 // archiveURL constructs a tarball download URL for the given ref based on the
-// hosting platform detected from u's hostname.
+// hosting platform detected from u's hostname. The API endpoints are used
+// rather than the web URLs because they resolve short commit SHAs.
 func archiveURL(u *url.URL, ref string) (string, error) {
 	owner, repo, err := parseOwnerRepo(u.Path)
 	if err != nil {
@@ -136,9 +185,9 @@ func archiveURL(u *url.URL, ref string) (string, error) {
 
 	switch {
 	case host == "github.com" || strings.HasSuffix(host, ".github.com"):
-		return fmt.Sprintf("https://github.com/%s/%s/archive/%s.tar.gz", owner, repo, ref), nil
+		return fmt.Sprintf("https://api.github.com/repos/%s/%s/tarball/%s", owner, repo, ref), nil
 	case host == "gitlab.com" || strings.HasSuffix(host, ".gitlab.com"):
-		return fmt.Sprintf("https://gitlab.com/%s/%s/-/archive/%s/%s-%s.tar.gz", owner, repo, ref, repo, ref), nil
+		return fmt.Sprintf("https://gitlab.com/api/v4/projects/%s%%2F%s/repository/archive.tar.gz?sha=%s", owner, repo, ref), nil
 	case host == "bitbucket.org" || strings.HasSuffix(host, ".bitbucket.org"):
 		return fmt.Sprintf("https://bitbucket.org/%s/%s/get/%s.tar.gz", owner, repo, ref), nil
 	default:

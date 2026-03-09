@@ -25,19 +25,19 @@ func TestArchiveURL(t *testing.T) {
 			name: "github with .git suffix",
 			url:  "https://github.com/hashicorp/terraform.git",
 			ref:  "abc1234",
-			want: "https://github.com/hashicorp/terraform/archive/abc1234.tar.gz",
+			want: "https://api.github.com/repos/hashicorp/terraform/tarball/abc1234",
 		},
 		{
 			name: "github without .git suffix",
 			url:  "https://github.com/hashicorp/terraform",
 			ref:  "abc1234",
-			want: "https://github.com/hashicorp/terraform/archive/abc1234.tar.gz",
+			want: "https://api.github.com/repos/hashicorp/terraform/tarball/abc1234",
 		},
 		{
 			name: "gitlab",
 			url:  "https://gitlab.com/myorg/myrepo.git",
 			ref:  "def5678",
-			want: "https://gitlab.com/myorg/myrepo/-/archive/def5678/myrepo-def5678.tar.gz",
+			want: "https://gitlab.com/api/v4/projects/myorg%2Fmyrepo/repository/archive.tar.gz?sha=def5678",
 		},
 		{
 			name: "bitbucket",
@@ -49,25 +49,25 @@ func TestArchiveURL(t *testing.T) {
 			name: "github via ssh",
 			url:  "ssh://git@github.com/hashicorp/terraform.git",
 			ref:  "abc1234",
-			want: "https://github.com/hashicorp/terraform/archive/abc1234.tar.gz",
+			want: "https://api.github.com/repos/hashicorp/terraform/tarball/abc1234",
 		},
 		{
 			name: "github via http",
 			url:  "http://github.com/hashicorp/terraform.git",
 			ref:  "abc1234",
-			want: "https://github.com/hashicorp/terraform/archive/abc1234.tar.gz",
+			want: "https://api.github.com/repos/hashicorp/terraform/tarball/abc1234",
 		},
 		{
 			name: "github via git scheme",
 			url:  "git://github.com/hashicorp/terraform.git",
 			ref:  "abc1234",
-			want: "https://github.com/hashicorp/terraform/archive/abc1234.tar.gz",
+			want: "https://api.github.com/repos/hashicorp/terraform/tarball/abc1234",
 		},
 		{
 			name: "gitlab via ssh",
 			url:  "ssh://git@gitlab.com/myorg/myrepo.git",
 			ref:  "def5678",
-			want: "https://gitlab.com/myorg/myrepo/-/archive/def5678/myrepo-def5678.tar.gz",
+			want: "https://gitlab.com/api/v4/projects/myorg%2Fmyrepo/repository/archive.tar.gz?sha=def5678",
 		},
 		{
 			name: "bitbucket via ssh",
@@ -363,16 +363,16 @@ func TestFetchArchive_subdir(t *testing.T) {
 		t.Fatalf("fetchArchive() error: %v", err)
 	}
 
-	// The subdir contents should be at the root of dst.
-	got, err := os.ReadFile(filepath.Join(dst, "m.tf"))
+	// The subdir path should be preserved relative to dst.
+	got, err := os.ReadFile(filepath.Join(dst, "modules", "m.tf"))
 	if err != nil {
-		t.Fatalf("expected modules/m.tf at dst root: %v", err)
+		t.Fatalf("expected modules/m.tf under dst: %v", err)
 	}
 	if string(got) != "module" {
 		t.Errorf("m.tf content = %q, want %q", got, "module")
 	}
 
-	// Root-level files should not be present.
+	// Files outside the subdir should not be extracted.
 	if _, err := os.Stat(filepath.Join(dst, "main.tf")); err == nil {
 		t.Error("main.tf should not exist in dst when subdir is set")
 	}
