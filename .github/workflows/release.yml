@@ -24,7 +24,7 @@ jobs:
         with:
           go-version: '^1.15'
       - name: Setup signore
-        uses: hashicorp/setup-signore@v2
+        uses: hashicorp/setup-signore@222ce0f38126bd54dbbe46967c3d0f0b5addd9ca # v2
         with:
           github-token: ${{secrets.SIGNORE_TOKEN}}
     
